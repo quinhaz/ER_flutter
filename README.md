@@ -30,11 +30,10 @@ flutter pub get
 
 Para testar online:
 - https://dartpad.dev/
+- ...
 
-- 
-
-flutter run -d windows
-flutter run -d chrome
+- flutter run -d windows
+- flutter run -d chrome
 
 - Durante a execução, o Flutter permite interatividade no terminal:
   -> r → Hot reload
@@ -42,11 +41,12 @@ flutter run -d chrome
   -> q → Sair da execução
 
 ## 6. Estrutura do projeto
-lib/
-├─ main.dart       <-- entrada app e maioria do código
-├─ pages/          <-- telas
-├─ widgets/        <-- widgets reutilizáveis
-├─ models/         <-- classes data
-├─ services/       <-- lógica e APIs
+- lib/
+- ├─ main.dart       <-- entrada app e maioria do código
+- ├─ pages/          <-- telas
+- ├─ widgets/        <-- widgets reutilizáveis
+- ├─ models/         <-- classes data
+- ├─ services/       <-- lógica e APIs
 
 ## 7. Commits
+
