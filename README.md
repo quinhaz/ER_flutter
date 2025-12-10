@@ -1,16 +1,53 @@
-# er_proj
+## er_proj
 
-A new Flutter project.
+## 1. Pré-requisitos instalados
 
-## Getting Started
+- [Flutter SDK](https://flutter.dev/docs/get-started/install)  
+- [VSCode](https://code.visualstudio.com/)
+- [Git](https://git-scm.com/downloads) (convém)
 
-This project is a starting point for a Flutter application.
+## 2. Instalação do Flutter no Windows
 
-A few resources to get you started if this is your first Flutter project:
+1. Download e config do Flutter SDK: (https://flutter.dev/docs/get-started/install/windows) - isto está super bem explicado
+2. Extrai a pasta `flutter` para `C:\Users\<teu-user>\flutter`  
+3. > Para Windows, certifica-te de adicionar o Flutter ao PATH do sistema:
+   - **Win + S** → digita “Environment Variables” → **Editar variáveis de ambiente do sistema**  
+   - Em **System Variables**, encontre **Path** → **Editar** → **Novo** → adiciona:
+     ```
+     C:\Users\<teu-user>\flutter\bin
+     ```
+   - Confirma tudo e reinicia a Shell e o VSCode (to make sure que a versão do flutter está ok).
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+## 3. Clone do repo
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## 4. Testar instalação + dependências:
+
+# Na shell:
+flutter --version
+flutter pub get
+
+## 5. Have fun:
+
+Para testar online:
+- https://dartpad.dev/
+- ...
+
+- flutter run -d windows
+- flutter run -d chrome
+
+- Durante a execução, o Flutter permite interatividade no terminal:
+  -> r → Hot reload
+  -> R → Hot restart
+  -> q → Sair da execução
+
+## 6. Estrutura do projeto
+- lib/
+- ├─ main.dart       <-- entrada app e maioria do código
+- ├─ pages/          <-- telas
+- ├─ widgets/        <-- widgets reutilizáveis
+- ├─ models/         <-- classes data
+- ├─ services/       <-- lógica e APIs
+
+## 7. Commits
+
+
