@@ -18,38 +18,288 @@ void main() {
 
 class GRIApp extends StatelessWidget {
   const GRIApp({super.key});
+  
   @override
   Widget build(BuildContext context) {
-    final seed = const Color(0xFF4B0082); // indigo/purple clerical
     return MaterialApp(
-      title: 'GRI - Gestão de Registos',
+      title: 'GRI - Sistema Digital de Gestão de Registos da Igreja',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: seed),
-        scaffoldBackgroundColor: const Color(0xFFF6F5FB),
-        appBarTheme: AppBarTheme(
-          backgroundColor: ColorScheme.fromSeed(seedColor: seed).primaryContainer,
-          foregroundColor: ColorScheme.fromSeed(seedColor: seed).onPrimaryContainer,
-          elevation: 1,
+      theme: _buildGRITheme(),
+      home: const MainShell(),
+    );
+  }
+
+  ThemeData _buildGRITheme() {
+    // Cores inspiradas no contexto eclesiástico
+    const Color primaryColor = Color.fromARGB(255, 142, 46, 135);
+    const Color secondaryColor = Color.fromARGB(255, 162, 84, 135);
+    const Color accentColor = Color.fromARGB(255, 166, 50, 125);
+    const Color backgroundColor = Color(0xFFF8F5F0);
+    const Color surfaceColor = Color(0xFFFFFFFF);
+    const Color errorColor = Color(0xFFC41E3A);
+    
+    return ThemeData(
+      useMaterial3: true,
+      colorScheme: ColorScheme(
+        brightness: Brightness.light,
+        primary: primaryColor,
+        onPrimary: Colors.white,
+        primaryContainer: Color(0xFFE8F5E9),
+        onPrimaryContainer: Color(0xFF1B5E20),
+        secondary: secondaryColor,
+        onSecondary: Colors.black,
+        secondaryContainer: Color(0xFFFFF8E1),
+        onSecondaryContainer: Color.fromARGB(255, 166, 50, 125),
+        tertiary: accentColor,
+        onTertiary: Colors.white,
+        tertiaryContainer: Color(0xFFFFF3E0),
+        onTertiaryContainer: Color(0xFF5D4037),
+        error: errorColor,
+        onError: Colors.white,
+        background: backgroundColor,
+        onBackground: Color(0xFF1C1C1C),
+        surface: surfaceColor,
+        onSurface: Color(0xFF1C1C1C),
+        surfaceVariant: Color(0xFFF5F5F5),
+        onSurfaceVariant: Color(0xFF757575),
+        outline: Color(0xFFBDBDBD),
+        outlineVariant: Color(0xFFE0E0E0),
+      ),
+      scaffoldBackgroundColor: backgroundColor,
+      
+      // AppBar temática
+      appBarTheme: AppBarTheme(
+        backgroundColor: primaryColor,
+        foregroundColor: Colors.white,
+        elevation: 4,
+        centerTitle: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.only(
+            bottomLeft: Radius.circular(12),
+            bottomRight: Radius.circular(12),
+          ),
         ),
-        cardTheme: CardThemeData(
+        titleTextStyle: TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.5,
+          fontFamily: 'Times New Roman',
+        ),
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      
+      // Cards com bordas suaves e sombra sutil
+      cardTheme: CardThemeData(
+        elevation: 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: Colors.grey.shade200, width: 1),
+        ),
+        color: surfaceColor,
+        margin: const EdgeInsets.all(8),
+        shadowColor: primaryColor.withOpacity(0.1),
+      ),
+      
+      // Input fields elegantes
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: primaryColor.withOpacity(0.3)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: primaryColor.withOpacity(0.3)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: primaryColor, width: 2),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: errorColor),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: errorColor, width: 2),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        labelStyle: TextStyle(color: primaryColor.withOpacity(0.7)),
+        hintStyle: TextStyle(color: Colors.grey.shade600),
+        prefixIconColor: primaryColor,
+        suffixIconColor: primaryColor,
+      ),
+      
+      // Botões com design consistente
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: primaryColor,
+          foregroundColor: Colors.white,
           elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          textStyle: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+          ),
+          disabledBackgroundColor: primaryColor.withOpacity(0.5),
+          disabledForegroundColor: Colors.white.withOpacity(0.7),
         ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: Colors.white,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+      
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: secondaryColor,
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          textStyle: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+            decoration: TextDecoration.underline,
           ),
         ),
       ),
-      home: const MainShell(),
+      
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: primaryColor,
+          side: BorderSide(color: primaryColor, width: 1.5),
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 22),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          textStyle: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+      
+      // Tipografia apropriada para o contexto
+      textTheme: TextTheme(
+        displayLarge: TextStyle(
+          fontSize: 32,
+          fontWeight: FontWeight.w700,
+          color: primaryColor,
+          fontFamily: 'Georgia',
+        ),
+        displayMedium: TextStyle(
+          fontSize: 28,
+          fontWeight: FontWeight.w600,
+          color: primaryColor,
+          fontFamily: 'Georgia',
+        ),
+        displaySmall: TextStyle(
+          fontSize: 24,
+          fontWeight: FontWeight.w600,
+          color: primaryColor,
+        ),
+        headlineMedium: TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+          color: primaryColor,
+        ),
+        headlineSmall: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+          color: primaryColor,
+        ),
+        titleLarge: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFF1C1C1C),
+        ),
+        titleMedium: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w500,
+          color: Color(0xFF1C1C1C),
+        ),
+        bodyLarge: TextStyle(
+          fontSize: 16,
+          color: Color(0xFF333333),
+          height: 1.5,
+        ),
+        bodyMedium: TextStyle(
+          fontSize: 14,
+          color: Color(0xFF555555),
+          height: 1.5,
+        ),
+        labelLarge: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          color: Colors.white,
+        ),
+      ),
+      
+      // Ícones temáticos
+      iconTheme: IconThemeData(
+        color: primaryColor,
+        size: 24,
+      ),
+      
+      // Divider mais sutil
+      dividerTheme: DividerThemeData(
+        color: Colors.grey.shade300,
+        thickness: 1,
+        space: 20,
+      ),
+      
+      // ListTile mais elegante
+      listTileTheme: ListTileThemeData(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        tileColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        iconColor: primaryColor,
+        titleTextStyle: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w500,
+          color: Color(0xFF1C1C1C),
+        ),
+        subtitleTextStyle: TextStyle(
+          fontSize: 14,
+          color: Color(0xFF666666),
+        ),
+      ),
+      
+      // Progress indicator temático
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        linearTrackColor: primaryColor.withOpacity(0.2),
+        color: secondaryColor,
+        circularTrackColor: primaryColor.withOpacity(0.2),
+      ),
+      
+      // SnackBar com cores apropriadas
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: primaryColor,
+        contentTextStyle: const TextStyle(color: Colors.white),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        elevation: 6,
+      ),
+      
+      // Dialog com design elegante
+      dialogTheme: DialogThemeData(
+        backgroundColor: surfaceColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        elevation: 8,
+        titleTextStyle: TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+          color: primaryColor,
+        ),
+        contentTextStyle: TextStyle(
+          fontSize: 16,
+          color: Color(0xFF333333),
+        ),
+      ),
     );
   }
 }
@@ -66,13 +316,41 @@ extension RoleExt on Role {
       case Role.Padre:
         return 'Padre';
       case Role.Administracao:
-        return 'Admin';
+        return 'Administração';
       case Role.Fiel:
         return 'Fiel';
       case Role.Voluntario:
         return 'Voluntário';
       case Role.Gestao:
         return 'Gestão';
+    }
+  }
+  IconData get icon {
+    switch (this) {
+      case Role.Padre:
+        return Icons.church;
+      case Role.Administracao:
+        return Icons.admin_panel_settings;
+      case Role.Fiel:
+        return Icons.person;
+      case Role.Voluntario:
+        return Icons.volunteer_activism;
+      case Role.Gestao:
+        return Icons.account_balance_wallet;
+    }
+  }
+  Color get color {
+    switch (this) {
+      case Role.Padre:
+        return Color(0xFF2C5530);
+      case Role.Administracao:
+        return Color(0xFF1565C0);
+      case Role.Fiel:
+        return Color(0xFF6A1B9A);
+      case Role.Voluntario:
+        return Color(0xFFF57C00);
+      case Role.Gestao:
+        return Color(0xFFC62828);
     }
   }
 }
@@ -507,7 +785,7 @@ class _MainShellState extends State<MainShell> {
     final isWide = MediaQuery.of(context).size.width >= 900;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('GRI — Gestão de Registos'),
+        title: const Text('GRI — Gestão de Registos da Igreja'),
         actions: [
           Consumer<AppState>(builder: (context, s, _) {
             if (!s.loggedIn) return const SizedBox.shrink();
