@@ -1,6 +1,7 @@
 // imports, theme, helpers, domain models
 
 import 'dart:math';
+import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -12,9 +13,8 @@ void main() {
   ));
 }
 
-/* =========================
-   THEME & APP
-   ========================= */
+
+//THEME & APP
 
 class GRIApp extends StatelessWidget {
   const GRIApp({super.key});
@@ -234,13 +234,13 @@ class GRIApp extends StatelessWidget {
         ),
       ),
       
-      // Ícones temáticos
+      // Ícones tema
       iconTheme: IconThemeData(
         color: primaryColor,
         size: 24,
       ),
       
-      // Divider mais sutil
+      // Divider
       dividerTheme: DividerThemeData(
         color: Colors.grey.shade300,
         thickness: 1,
@@ -304,9 +304,7 @@ class GRIApp extends StatelessWidget {
   }
 }
 
-/* =========================
-   DOMAIN MODELS
-   ========================= */
+//DOMAIN MODELS
 
 enum Role { Padre, Administracao, Fiel, Voluntario, Gestao }
 
@@ -374,7 +372,7 @@ class Celebration {
   final String details;
   final String ownerUserId;   // fiel associado (titular)
 
-  // Batismo-specific
+  // Batismo-especifico
   String? nomeBatizado;
   String? pai;
   String? mae;
@@ -382,12 +380,12 @@ class Celebration {
   String? padrinho2;
   DateTime? dataNascimento;
 
-  // Casamento-specific
+  // Casamento-especifico
   String? conjugeUserId; // id do outro fiel
   String? testemunha1;
   String? testemunha2;
 
-  // Óbito-specific
+  // Óbito-especifico
   String? nomeFalecido;
   DateTime? dataNascimentoFalecido;
   DateTime? dataObito;
@@ -436,7 +434,7 @@ class Document {
   String? paymentMethod;
   DateTime? paymentDate;
 
-  // link to get original celebration when rendering (set at creation)
+  // link para celebração original ao renderizar (definido na criação)
   Celebration? originalCelebration;
 
   Document({
@@ -456,20 +454,12 @@ class Document {
   bool get available => feeStatus == FeeStatus.Pago;
 }
 
-/* =========================
-   UTIL HELPERS
-   ========================= */
-
+// utilitariios
 String fmtDate(DateTime? d) => d == null ? '-' : d.toIso8601String().split('T').first;
 
 String shortId(String id) => id.split('-').last;
 
 // repository (in-memory) and methods
-
-// =========================
-// REPOSITORY (IN-MEMORY)
-// =========================
-
 abstract class Repository {
   Future<User?> findUserByEmail(String email);
   Future<User> createUser(String name, String email, String password, Role role);
@@ -502,7 +492,7 @@ class InMemoryRepository implements Repository {
       User(id: 'u_fiel2', name: 'João Pereira', email: 'joao@gri.local', password: 'fiel123', role: Role.Fiel),
     ]);
 
-    // seed a celebration for Maria (signed) and its document pending
+    // celebração para a Maria (assinada) e o seu doc pendente
     final c1 = Celebration(
       id: _nextId('c'),
       type: CelebrationType.Batismo,
@@ -606,7 +596,7 @@ class InMemoryRepository implements Repository {
     c.signedByUserId = padreUserId;
     c.signedAt = DateTime.now();
 
-    // auto-generate a document for owner if not exists
+    // auto-gen um docs para o owner (se ele não existir)
     final exists = _documents.where((d) => d.celebrationId == c.id && d.ownerUserId == c.ownerUserId).toList();
     if (exists.isEmpty) {
       final doc = Document(
@@ -641,7 +631,7 @@ class InMemoryRepository implements Repository {
   @override
   Future<List<Celebration>> getAllCelebrations() async => List.from(_celebrations);
 
-  // Documents
+  // Documentos
   @override
   Future<Document> createDocumentForCelebration(String celebrationId, String ownerUserId, String docType, double fee) async {
     final doc = Document(
@@ -693,11 +683,6 @@ class InMemoryRepository implements Repository {
 }
 
 // AppState (Provider) and Shell + navigation
-
-/* =========================
-   APP STATE (Provider)
-   ========================= */
-
 class AppState extends ChangeNotifier {
   final Repository repository;
   User? _currentUser;
@@ -727,10 +712,9 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Users
   Future<List<User>> getAllUsers() => repository.getAllUsers();
 
-  // celebrations
+  // celebrações
   Future<Celebration> createCelebration(CelebrationType type, DateTime date, String details, String ownerUserId, Map<String, dynamic> extraFields) =>
       repository.createCelebration(type, date, details, ownerUserId, extraFields);
 
@@ -743,7 +727,7 @@ class AppState extends ChangeNotifier {
   Future<List<Celebration>> searchCelebrations(DateTime from, DateTime to) => repository.searchCelebrations(from, to);
   Future<List<Celebration>> getAllCelebrations() => repository.getAllCelebrations();
 
-  // documents & payments
+  // documentos & pagamentos
   Future<Document> createDocumentForCelebration(String celebrationId, String ownerUserId, String docType, double fee) =>
       repository.createDocumentForCelebration(celebrationId, ownerUserId, docType, fee);
 
@@ -759,9 +743,8 @@ class AppState extends ChangeNotifier {
   Future<List<Document>> getPendingDocumentsForUser(String userId) => repository.getPendingDocumentsForUser(userId);
 }
 
-/* =========================
-   MAIN SHELL (Navigation)
-   ========================= */
+
+// MAIN SHELL (Navigation)
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -849,12 +832,7 @@ class _MainShellState extends State<MainShell> {
   }
 }
 
-// Login and Register pages (with Enter submit) and common small widgets
-
-/* =========================
-   PAGES: Login & Register
-   ========================= */
-
+// PAGES: Login & Register
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
   @override
@@ -901,7 +879,7 @@ class _LoginPageState extends State<LoginPage> {
               child: RawKeyboardListener(
                 focusNode: _focusNode,
                 onKey: (event) {
-                  if (event is RawKeyDownEvent && event.logicalKey == LogicalKeyboardKey.enter) {
+                  if (event is RawKeyDownEvent && event.logicalKey == LogicalKeyboardKey.enter) { // (com Enter submit)
                     if (!_loading) _submit();
                   }
                 },
@@ -1047,21 +1025,13 @@ class _RegisterPageState extends State<RegisterPage> {
   }
 }
 
-/* small reusable widgets could go here if needed */
-
-// Padre panel with expanded fields (Batismo, Casamento, Obito) + display detail helpers
-
-/* =========================
-   PAGE: Padre Panel (create + list + sign) - expanded fields
-   ========================= */
-
+// Padre panel + display detalhe helpers
 class PadrePanelPage extends StatefulWidget {
   const PadrePanelPage({super.key});
   @override
   State<PadrePanelPage> createState() => _PadrePanelPageState();
 }
 class _PadrePanelPageState extends State<PadrePanelPage> {
-  // common form state
   CelebrationType _type = CelebrationType.Batismo;
   DateTime _date = DateTime.now();
   String? _selectedFielId;
@@ -1077,12 +1047,12 @@ class _PadrePanelPageState extends State<PadrePanelPage> {
   final _padrinho2 = TextEditingController();
   DateTime? _dataNascimento;
 
-  // Casamento
+  // Casamento controllers
   String? _conjugeId;
   final _testemunha1 = TextEditingController();
   final _testemunha2 = TextEditingController();
 
-  // Óbito
+  // Óbito controllers
   final _nomeFalecido = TextEditingController();
   final _localSepultura = TextEditingController();
   DateTime? _dataNascimentoFalecido;
@@ -1412,12 +1382,8 @@ class _PadrePanelPageState extends State<PadrePanelPage> {
   }
 }
 
-// Search page, Documents page, Payments page & Payment dialog; final helpers
-
-/* =========================
-   PAGE: Search Celebrations (Padre/Admin)
-   ========================= */
-
+// Pesquisa, Documentos, Pagamentos + dialog
+//  (Padre/Admin)
 class SearchCelebrationsPage extends StatefulWidget {
   const SearchCelebrationsPage({super.key});
   @override
@@ -1519,9 +1485,8 @@ class _SearchCelebrationsPageState extends State<SearchCelebrationsPage> {
   }
 }
 
-/* =========================
-   PAGE: Documents (Fiel sees only paid; Padre/Admin see all)
-   ========================= */
+// Documentos (Fiel vê apenas pagos
+//             Padre/Admin vê todos)
 
 class DocumentsPage extends StatefulWidget {
   const DocumentsPage({super.key});
@@ -1623,9 +1588,7 @@ class _DocumentsPageState extends State<DocumentsPage> {
   }
 }
 
-/* =========================
-   PAGE: Payments (Pending + pay form)
-   ========================= */
+// Pagamentos (Pendentes + formulário de pagamento)
 
 class PaymentsPage extends StatefulWidget {
   const PaymentsPage({super.key});
@@ -1695,7 +1658,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
   }
 }
 
-/* Payment Dialog implementing MBWay / Card / Transfer fields + validation */
+// MBWay / Card / Transfer fields + validation
 class PaymentDialog extends StatefulWidget {
   final Document document;
   final VoidCallback onSuccess;
@@ -1820,4 +1783,3 @@ class _PaymentDialogState extends State<PaymentDialog> {
     );
   }
 }
-
