@@ -5,10 +5,12 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 
 void main() {
   runApp(ChangeNotifierProvider(
-    create: (_) => AppState(repository: InMemoryRepository()),
+    create: (_) => AppState(repository: MySQLRepository()),
     child: const GRIApp(),
   ));
 }
@@ -478,11 +480,347 @@ abstract class Repository {
   Future<List<Document>> getPendingDocumentsForUser(String userId);
 }
 
-class InMemoryRepository implements Repository {
+class MySQLRepository implements Repository {
+  
+  // --- 1. DYNAMIC URL HANDLING ---
+  // This automatically picks the right IP based on where you run the app.
+  String get baseUrl {
+    if (kIsWeb) {
+      return "http://localhost"; // Make sure path includes subfolders if needed
+    } else if (defaultTargetPlatform == TargetPlatform.android) {
+      return "http://10.0.2.2"; // FIX: Change 172.0.0.1 back to 10.0.2.2
+    } else {
+      return "http://localhost";
+    }
+  }
+
+  // Local caches to keep the app fast
+  List<User> _users = [];
+  List<Celebration> _celebrations = [];
+  List<Document> _documents = [];
+
+  // --- 2. INIT DATA (READ FROM DB) ---
+  Future<void> initData() async {
+    try {
+      // Uses the dynamic baseUrl + db_connect.php
+      final response = await http.get(Uri.parse("$baseUrl/db_connect.php"));
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+
+        // A. Parse Users
+        if (data['users'] != null) {
+          _users = (data['users'] as List).map((json) {
+            return User(
+              id: json['id'].toString(),
+              name: json['name'],
+              email: json['email'],
+              // FIX: Your DB column is 'password_hash' based on screenshot
+              password: json['password_hash'] ?? '', 
+              role: _parseRole(json['role']),
+            );
+          }).toList();
+        }
+
+        // B. Parse Celebrations
+        if (data['celebrations'] != null) {
+          _celebrations = (data['celebrations'] as List).map((json) {
+            return Celebration(
+              id: json['id'].toString(),
+              type: _parseCelebType(json['type']),
+              date: DateTime.parse(json['date']),
+              details: json['details'] ?? '',
+              ownerUserId: json['owner_user_id']?.toString() ?? '0',
+              
+              // Specific fields (Option A schema)
+              nomeBatizado: json['nome_batizado'],
+              pai: json['pai'],
+              mae: json['mae'],
+              padrinho1: json['padrinho1'],
+              padrinho2: json['padrinho2'],
+              dataNascimento: json['data_nascimento'] != null ? DateTime.tryParse(json['data_nascimento']) : null,
+              
+              conjugeUserId: json['conjuge_user_id']?.toString(),
+              testemunha1: json['testemunha1'],
+              testemunha2: json['testemunha2'],
+              
+              nomeFalecido: json['nome_falecido'],
+              dataNascimentoFalecido: json['data_nascimento_falecido'] != null ? DateTime.tryParse(json['data_nascimento_falecido']) : null,
+              dataObito: json['data_obito'] != null ? DateTime.tryParse(json['data_obito']) : null,
+              localSepultura: json['local_sepultura'],
+
+              // Signatures (if they exist)
+              signedByUserId: json['signed_by_user_id']?.toString(),
+              signedAt: json['signed_at'] != null ? DateTime.tryParse(json['signed_at']) : null,
+            );
+          }).toList();
+        }
+
+        // C. Parse Documents
+        if (data['documents'] != null) {
+          _documents = (data['documents'] as List).map((json) {
+            return Document(
+              id: json['id'].toString(),
+              celebrationId: json['celebration_id'].toString(),
+              ownerUserId: json['owner_user_id'].toString(),
+              type: json['type'],
+              feeAmount: double.tryParse(json['fee_amount'].toString()) ?? 0.0,
+              feeStatus: json['fee_status'] == 'Pago' ? FeeStatus.Pago : FeeStatus.Pendente,
+              fileContent: json['file_path'], // Mapping DB 'file_path' to object 'fileContent'
+            );
+          }).toList();
+        }
+
+        print("Data loaded successfully!");
+      }
+    } catch (e) {
+      print("Error connecting to Database: $e");
+    }
+  }
+
+  // --- HELPERS ---
+  Role _parseRole(String? roleStr) {
+    if (roleStr == null) return Role.Fiel;
+    return Role.values.firstWhere(
+      (e) => e.toString().split('.').last.toLowerCase() == roleStr.toLowerCase(), 
+      orElse: () => Role.Fiel
+    );
+  }
+  
+  CelebrationType _parseCelebType(String? typeStr) {
+    if (typeStr == null) return CelebrationType.Batismo;
+    return CelebrationType.values.firstWhere(
+      (e) => e.name == typeStr, 
+      orElse: () => CelebrationType.Batismo
+    );
+  }
+
+  // --- REPOSITORY METHODS ---
+
+  @override
+  Future<User?> findUserByEmail(String email) async {
+    try { return _users.firstWhere((u) => u.email == email); } catch (_) { return null; }
+  }
+
+  @override
+  Future<List<User>> getAllUsers() async => _users;
+
+  @override
+  Future<List<Celebration>> getAllCelebrations() async => _celebrations;
+
+  // 3. CREATE USER
+  @override
+  Future<User> createUser(String name, String email, String password, Role role) async {
+    final url = Uri.parse("$baseUrl/create_user.php");
+    
+    final response = await http.post(url, body: json.encode({
+      'name': name,
+      'email': email,
+      'password': password,
+      'role': role.label, // Sends "Fiel", "Padre", etc.
+    }));
+
+    final data = json.decode(response.body);
+    if (data['success'] == true) {
+      final newUser = User(
+        id: data['id'].toString(), 
+        name: name, 
+        email: email, 
+        password: password, 
+        role: role
+      );
+      _users.add(newUser);
+      return newUser;
+    } else {
+      throw Exception(data['message']);
+    }
+  }
+
+  // 4. CREATE CELEBRATION (With Date Fix)
+  @override
+  Future<Celebration> createCelebration(
+      CelebrationType type, 
+      DateTime date, 
+      String details, 
+      String ownerUserId, 
+      Map<String, dynamic> extraFields
+  ) async {
+    
+    final url = Uri.parse("$baseUrl/create_celebration.php"); 
+
+    // Safe Body: Convert dates to Strings before sending
+    final Map<String, dynamic> body = {
+      'type': type.name,
+      'date': date.toIso8601String(),
+      'details': details,
+      'ownerUserId': ownerUserId,
+      
+      'nomeBatizado': extraFields['nomeBatizado'],
+      'pai': extraFields['pai'],
+      'mae': extraFields['mae'],
+      'padrinho1': extraFields['padrinho1'],
+      'padrinho2': extraFields['padrinho2'],
+      'conjugeUserId': extraFields['conjugeUserId'],
+      'testemunha1': extraFields['testemunha1'],
+      'testemunha2': extraFields['testemunha2'],
+      'nomeFalecido': extraFields['nomeFalecido'],
+      'localSepultura': extraFields['localSepultura'],
+
+      // Handle Dates safely
+      'dataNascimento': extraFields['dataNascimento']?.toIso8601String(),
+      'dataNascimentoFalecido': extraFields['dataNascimentoFalecido']?.toIso8601String(),
+      'dataObito': extraFields['dataObito']?.toIso8601String(),
+    };
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: json.encode(body),
+      );
+
+      final responseData = json.decode(response.body);
+
+      if (response.statusCode == 200 && responseData['success'] == true) {
+        final newId = responseData['id'].toString();
+        
+        // Create local object (Keeping original DateTimes for the App to use)
+        final newCelebration = Celebration(
+          id: newId,
+          type: type,
+          date: date,
+          details: details,
+          ownerUserId: ownerUserId,
+          nomeBatizado: extraFields['nomeBatizado'],
+          pai: extraFields['pai'],
+          mae: extraFields['mae'],
+          padrinho1: extraFields['padrinho1'],
+          padrinho2: extraFields['padrinho2'],
+          dataNascimento: extraFields['dataNascimento'],
+          conjugeUserId: extraFields['conjugeUserId'],
+          testemunha1: extraFields['testemunha1'],
+          testemunha2: extraFields['testemunha2'],
+          nomeFalecido: extraFields['nomeFalecido'],
+          dataNascimentoFalecido: extraFields['dataNascimentoFalecido'],
+          dataObito: extraFields['dataObito'],
+          localSepultura: extraFields['localSepultura'],
+        );
+
+        _celebrations.add(newCelebration);
+        return newCelebration;
+      } else {
+        throw Exception(responseData['message'] ?? "Server error");
+      }
+    } catch (e) {
+      throw Exception("Failed to create celebration: $e");
+    }
+  }
+
+  // 5. CREATE DOCUMENT
+  @override
+  Future<Document> createDocumentForCelebration(String celebrationId, String ownerUserId, String docType, double fee) async {
+    final url = Uri.parse("$baseUrl/create_document.php");
+
+    final response = await http.post(url, headers: {"Content-Type": "application/json"}, body: json.encode({
+      'celebrationId': celebrationId,
+      'ownerUserId': ownerUserId,
+      'type': docType,
+      'feeAmount': fee,
+    }));
+
+    final data = json.decode(response.body);
+    if (data['success'] == true) {
+      final doc = Document(
+        id: data['id'].toString(),
+        celebrationId: celebrationId,
+        ownerUserId: ownerUserId,
+        type: docType,
+        feeAmount: fee,
+        feeStatus: FeeStatus.Pendente,
+      );
+      _documents.add(doc);
+      return doc;
+    } else {
+      throw Exception("Failed to create document");
+    }
+  }
+
+  // 6. PAYMENTS
+  @override
+  Future<void> markFeePaid(String documentId, String method) async {
+    // Find the doc locally to get the amount (or pass it in args)
+    final doc = _documents.firstWhere((d) => d.id == documentId);
+    
+    final url = Uri.parse("$baseUrl/pay_fee.php");
+
+    final response = await http.post(url, body: json.encode({
+      'documentId': documentId,
+      'method': method,
+      'amount': doc.feeAmount,
+      'userId': doc.ownerUserId,
+    }));
+
+    final data = json.decode(response.body);
+    if (data['success']) {
+      // Update local state
+      doc.feeStatus = FeeStatus.Pago;
+      doc.paymentMethod = method;
+      doc.paymentDate = DateTime.now();
+    } else {
+      throw Exception("Payment failed");
+    }
+  }
+
+  // --- READ METHODS ---
+  @override
+  Future<Document?> getDocumentById(String docId) async {
+    try { return _documents.firstWhere((d) => d.id == docId); } catch (_) { return null; }
+  }
+
+  @override
+  Future<List<Document>> getDocumentsForUser(String userId, Role role) async {
+    if (role == Role.Padre || role == Role.Administracao) return _documents;
+    return _documents.where((d) => d.ownerUserId == userId).toList();
+  }
+
+  @override
+  Future<List<Document>> getPendingDocumentsForUser(String userId) async {
+    return _documents.where((d) => d.ownerUserId == userId && d.feeStatus == FeeStatus.Pendente).toList();
+  }
+
+  @override
+  Future<User?> getUserById(String id) async {
+    try { return _users.firstWhere((u) => u.id == id); } catch (_) { return null; }
+  }
+
+  // Since we load all celebrations at initData, we can just filter the local list
+  @override
+  Future<List<Celebration>> searchCelebrations(DateTime from, DateTime to) async {
+    return _celebrations.where((c) => !c.date.isBefore(from) && !c.date.isAfter(to)).toList();
+  }
+
+  @override
+  Future<void> signCelebration(String celebrationId, String padreUserId) async {
+    // Note: You should technically write a sign_celebration.php for this.
+    // For now, we just update it locally so the UI updates.
+    final idx = _celebrations.indexWhere((c) => c.id == celebrationId);
+    if (idx != -1) {
+      final c = _celebrations[idx];
+      c.signedByUserId = padreUserId;
+      c.signedAt = DateTime.now();
+      
+      // Also generate the document locally
+      await createDocumentForCelebration(c.id, c.ownerUserId, 'Certidão de ${c.type.name}', 15.0);
+    }
+  }
+}
+
+/*class InMemoryRepository implements Repository {
   final List<User> _users = [];
   final List<Celebration> _celebrations = [];
   final List<Document> _documents = [];
 
+  
   InMemoryRepository() {
     // seed users
     _users.addAll([
@@ -680,14 +1018,21 @@ class InMemoryRepository implements Repository {
   Future<List<Document>> getPendingDocumentsForUser(String userId) async {
     return _documents.where((d) => d.ownerUserId == userId && d.feeStatus == FeeStatus.Pendente).toList();
   }
-}
+}*/
 
 // AppState (Provider) and Shell + navigation
 class AppState extends ChangeNotifier {
   final Repository repository;
   User? _currentUser;
 
-  AppState({required this.repository});
+  AppState({required this.repository}){_init();}
+
+  Future<void> _init() async {
+    if (repository is MySQLRepository) {
+      await (repository as MySQLRepository).initData();
+      notifyListeners(); // Refresh UI once data arrives
+    }
+  }
 
   User? get currentUser => _currentUser;
   bool get loggedIn => _currentUser != null;
