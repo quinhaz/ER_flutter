@@ -5,10 +5,11 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'dart:convert';
 
 void main() {
   runApp(ChangeNotifierProvider(
-    create: (_) => AppState(repository: InMemoryRepository()),
+    create: (_) => AppState(repository: MySQLRepository()),
     child: const GRIApp(),
   ));
 }
@@ -478,11 +479,223 @@ abstract class Repository {
   Future<List<Document>> getPendingDocumentsForUser(String userId);
 }
 
-class InMemoryRepository implements Repository {
+class MySQLRepository implements Repository {
+  // We keep local copies to make the app fast, but we load them from the server
+  List<User> _users = [];
+  List<Celebration> _celebrations = [];
+  List<Document> _documents = [];
+  
+  // ⚠️ CHANGE THIS IP: 
+  // Use '10.0.2.2' if using Android Emulator
+  // Use your PC's IP (e.g., '192.168.1.5') if using a real phone
+  final String apiUrl = "http://10.0.2.2/db_connect.php"; 
+
+  // This method triggers the download
+  Future<void> initData() async {
+    try {
+      final response = await http.get(Uri.parse(apiUrl));
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+
+        // 1. Parse Users
+        _users = (data['users'] as List).map((json) {
+          return User(
+            id: json['id'].toString(),
+            name: json['name'],
+            email: json['email'],
+            password: json['password'],
+            role: _parseRole(json['role']), // Helper method below
+          );
+        }).toList();
+
+        // 2. Parse Celebrations
+        _celebrations = (data['celebrations'] as List).map((json) {
+          return Celebration(
+            id: json['id'].toString(),
+            type: _parseCelebType(json['type']),
+            date: DateTime.parse(json['date']),
+            details: json['details'] ?? '',
+            ownerUserId: json['owner_user_id'].toString(), // Check your DB column name!
+            // Map specific fields based on columns in your DB
+            nomeBatizado: json['nome_batizado'],
+            nomeFalecido: json['nome_falecido'],
+            // ... Add other fields here matching your PHP JSON keys
+          );
+        }).toList();
+
+        // 3. Parse Documents
+        _documents = (data['documents'] as List).map((json) {
+          return Document(
+            id: json['id'].toString(),
+            celebrationId: json['celebration_id'].toString(),
+            ownerUserId: json['owner_user_id'].toString(),
+            type: json['type'],
+            feeAmount: double.tryParse(json['fee_amount'].toString()) ?? 0.0,
+            feeStatus: json['fee_status'] == 'Pago' ? FeeStatus.Pago : FeeStatus.Pendente,
+          );
+        }).toList();
+
+        print("Data loaded successfully!");
+      }
+    } catch (e) {
+      print("Error connecting to Database: $e");
+    }
+  }
+
+  // Helper to convert String to Enum
+  Role _parseRole(String roleStr) {
+    return Role.values.firstWhere(
+      (e) => e.toString().split('.').last == roleStr, 
+      orElse: () => Role.Fiel
+    );
+  }
+  
+  CelebrationType _parseCelebType(String typeStr) {
+    return CelebrationType.values.firstWhere(
+      (e) => e.name == typeStr, 
+      orElse: () => CelebrationType.Batismo
+    );
+  }
+
+  // --- STANDARD REPOSITORY METHODS (Same as InMemory but simpler) ---
+
+  @override
+  Future<User?> findUserByEmail(String email) async {
+    // In a real app, you would ask the server again, but for now check the loaded list
+    try { return _users.firstWhere((u) => u.email == email); } catch (_) { return null; }
+  }
+
+  @override
+  Future<List<User>> getAllUsers() async => _users;
+
+  @override
+  Future<List<Celebration>> getAllCelebrations() async => _celebrations;
+
+  // For methods that WRITE data (Create, Update), you must send a POST request to PHP
+  // For now, we will update the local list so the UI updates, 
+  // but you need to write a PHP script to save it permanently.
+  @override
+  Future<User> createUser(String name, String email, String password, Role role) async {
+    // TODO: Send POST request to PHP to insert user
+    final u = User(id: DateTime.now().toString(), name: name, email: email, password: password, role: role);
+    _users.add(u);
+    return u;
+  }
+
+  @override
+  Future<Celebration> createCelebration(
+    CelebrationType type, 
+    DateTime date, 
+    String details, 
+    String ownerUserId, 
+    Map<String, dynamic> extraFields
+) async {
+  
+  final url = Uri.parse("http://127.0.0.1/create_celebration.php"); 
+
+  // --- SAFE BODY CREATION ---
+  // We check if the dates exist. If they do, we turn them into Strings.
+  final Map<String, dynamic> body = {
+    'type': type.name,
+    'date': date.toIso8601String(),
+    'details': details,
+    'ownerUserId': ownerUserId,
+    
+    // String fields are safe to pass directly
+    'nomeBatizado': extraFields['nomeBatizado'],
+    'pai': extraFields['pai'],
+    'mae': extraFields['mae'],
+    'padrinho1': extraFields['padrinho1'],
+    'padrinho2': extraFields['padrinho2'],
+    'conjugeUserId': extraFields['conjugeUserId'],
+    'testemunha1': extraFields['testemunha1'],
+    'testemunha2': extraFields['testemunha2'],
+    'nomeFalecido': extraFields['nomeFalecido'],
+    'localSepultura': extraFields['localSepultura'],
+
+    // DATE FIELDS MUST BE CONVERTED TO STRING (Check for null first)
+    'dataNascimento': extraFields['dataNascimento']?.toIso8601String(),
+    'dataNascimentoFalecido': extraFields['dataNascimentoFalecido']?.toIso8601String(),
+    'dataObito': extraFields['dataObito']?.toIso8601String(),
+  };
+
+  try {
+    final response = await http.post(
+      url,
+      headers: {"Content-Type": "application/json"},
+      body: json.encode(body), // Now this won't crash!
+    );
+
+    final responseData = json.decode(response.body);
+
+    if (response.statusCode == 200 && responseData['success'] == true) {
+      final newId = responseData['id'].toString();
+      
+      final newCelebration = Celebration(
+        id: newId,
+        type: type,
+        date: date,
+        details: details,
+        ownerUserId: ownerUserId,
+        // For the local object, we CAN keep the original DateTime objects
+        nomeBatizado: extraFields['nomeBatizado'],
+        pai: extraFields['pai'],
+        mae: extraFields['mae'],
+        padrinho1: extraFields['padrinho1'],
+        padrinho2: extraFields['padrinho2'],
+        dataNascimento: extraFields['dataNascimento'], 
+        conjugeUserId: extraFields['conjugeUserId'],
+        testemunha1: extraFields['testemunha1'],
+        testemunha2: extraFields['testemunha2'],
+        nomeFalecido: extraFields['nomeFalecido'],
+        dataNascimentoFalecido: extraFields['dataNascimentoFalecido'],
+        dataObito: extraFields['dataObito'],
+        localSepultura: extraFields['localSepultura'],
+      );
+
+      _celebrations.add(newCelebration);
+      return newCelebration;
+    } else {
+      throw Exception(responseData['message'] ?? "Server error");
+    }
+  } catch (e) {
+    throw Exception("Failed to create celebration: $e");
+  }
+}
+  
+  @override
+  Future<Document> createDocumentForCelebration(String celebrationId, String ownerUserId, String docType, double fee) async {
+      throw UnimplementedError();
+  }
+
+  @override
+  Future<Document?> getDocumentById(String docId) async => null;
+
+  @override
+  Future<List<Document>> getDocumentsForUser(String userId, Role role) async => _documents;
+
+  @override
+  Future<List<Document>> getPendingDocumentsForUser(String userId) async => [];
+
+  @override
+  Future<User?> getUserById(String id) async => null;
+
+  @override
+  Future<void> markFeePaid(String documentId, String method) async {}
+
+  @override
+  Future<List<Celebration>> searchCelebrations(DateTime from, DateTime to) async => [];
+
+  @override
+  Future<void> signCelebration(String celebrationId, String padreUserId) async {}
+}
+/*class InMemoryRepository implements Repository {
   final List<User> _users = [];
   final List<Celebration> _celebrations = [];
   final List<Document> _documents = [];
 
+  
   InMemoryRepository() {
     // seed users
     _users.addAll([
@@ -680,14 +893,21 @@ class InMemoryRepository implements Repository {
   Future<List<Document>> getPendingDocumentsForUser(String userId) async {
     return _documents.where((d) => d.ownerUserId == userId && d.feeStatus == FeeStatus.Pendente).toList();
   }
-}
+}*/
 
 // AppState (Provider) and Shell + navigation
 class AppState extends ChangeNotifier {
   final Repository repository;
   User? _currentUser;
 
-  AppState({required this.repository});
+  AppState({required this.repository}){_init();}
+
+  Future<void> _init() async {
+    if (repository is MySQLRepository) {
+      await (repository as MySQLRepository).initData();
+      notifyListeners(); // Refresh UI once data arrives
+    }
+  }
 
   User? get currentUser => _currentUser;
   bool get loggedIn => _currentUser != null;
