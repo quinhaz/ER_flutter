@@ -1,5 +1,4 @@
 // imports, theme, helpers, domain models
-
 import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
@@ -566,10 +565,21 @@ class MySQLRepository implements Repository {
               type: json['type'],
               feeAmount: double.tryParse(json['fee_amount'].toString()) ?? 0.0,
               feeStatus: json['fee_status'] == 'Pago' ? FeeStatus.Pago : FeeStatus.Pendente,
-              fileContent: json['file_path'], // Mapping DB 'file_path' to object 'fileContent'
+              fileContent: json['file_path'],
             );
           }).toList();
         }
+
+        // --- ADICIONE ESTE BLOCO AQUI ---
+        // D. Link Documents to Celebrations (CRUCIAL PARA OS DETALHES APARECEREM)
+        for (var doc in _documents) {
+          try {
+            doc.originalCelebration = _celebrations.firstWhere((c) => c.id == doc.celebrationId);
+          } catch (_) {
+            // Ignora se não encontrar a celebração (evita crash)
+          }
+        }
+        // --------------------------------
 
         print("Data loaded successfully!");
       }
@@ -1734,97 +1744,206 @@ class SearchCelebrationsPage extends StatefulWidget {
   @override
   State<SearchCelebrationsPage> createState() => _SearchCelebrationsPageState();
 }
+
 class _SearchCelebrationsPageState extends State<SearchCelebrationsPage> {
-  DateTime _from = DateTime.now().subtract(const Duration(days: 365));
-  DateTime _to = DateTime.now().add(const Duration(days: 365));
+  // Intervalo padrão: últimos 30 dias até hoje (apenas como exemplo inicial)
+  DateTime _from = DateTime.now().subtract(const Duration(days: 30));
+  DateTime _to = DateTime.now();
+  
   List<Celebration> _result = [];
   bool _loading = false;
+  bool _hasSearched = false; // Para controlar quando mostrar a mensagem de "vazio"
 
-  List<Widget> _buildCelebrationDetails(Celebration c) {
-    final repo = Provider.of<AppState>(context).repository;
-    List<Widget> widgets = [];
+  // Helper para mostrar os detalhes específicos de cada tipo na lista
+  Widget _buildDetails(Celebration c) {
+    List<String> lines = [];
+    
     if (c.type == CelebrationType.Batismo) {
-      widgets.add(Text('Batizado: ${c.nomeBatizado ?? "-"}'));
-      widgets.add(Text('Pais: ${c.pai ?? "-"} e ${c.mae ?? "-"}'));
-      widgets.add(Text('Padrinhos: ${c.padrinho1 ?? "-"} e ${c.padrinho2 ?? "-"}'));
-      widgets.add(Text('Nascimento: ${fmtDate(c.dataNascimento)}'));
+      lines.add('Batizado: ${c.nomeBatizado ?? "-"}');
+      lines.add('Pais: ${c.pai ?? "-"} & ${c.mae ?? "-"}');
     } else if (c.type == CelebrationType.Casamento) {
-      widgets.add(Text('Titular: ${c.ownerUserId}'));
-      widgets.add(Text('Cônjuge: ${c.conjugeUserId ?? "-"}'));
-      widgets.add(Text('Testemunhas: ${c.testemunha1 ?? "-"} e ${c.testemunha2 ?? "-"}'));
+      lines.add('Cônjuges (IDs): ${c.ownerUserId} & ${c.conjugeUserId ?? "-"}');
+      lines.add('Testemunhas: ${c.testemunha1 ?? "-"}');
     } else {
-      widgets.add(Text('Falecido: ${c.nomeFalecido ?? "-"}'));
-      widgets.add(Text('Nascimento: ${fmtDate(c.dataNascimentoFalecido)}'));
-      widgets.add(Text('Óbito: ${fmtDate(c.dataObito)}'));
-      widgets.add(Text('Sepultura: ${c.localSepultura ?? "-"}'));
+      lines.add('Falecido: ${c.nomeFalecido ?? "-"}');
+      lines.add('Data Óbito: ${fmtDate(c.dataObito)}');
+      lines.add('Local: ${c.localSepultura ?? "-"}');
     }
-    return widgets;
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: lines.map((l) => Text(l, style: TextStyle(fontSize: 13, color: Colors.grey.shade700))).toList(),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final app = Provider.of<AppState>(context);
-    if (!app.loggedIn || !(app.currentUser!.role == Role.Padre || app.currentUser!.role == Role.Administracao)) {
-      return Center(child: Card(child: Padding(padding: const EdgeInsets.all(12), child: Text('Pesquisa reservada a Padre e Administração.', style: TextStyle(color: Colors.grey.shade700)))));
+    
+    // 1. VERIFICAÇÃO DE PERMISSÃO (RF11: Apenas Padre e Administração)
+    if (!app.loggedIn || 
+        !(app.currentUser!.role == Role.Padre || app.currentUser!.role == Role.Administracao)) {
+      return Center(
+        child: Card(
+          margin: const EdgeInsets.all(20),
+          child: Padding(
+            padding: const EdgeInsets.all(20), 
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.lock, size: 40, color: Colors.grey),
+                const SizedBox(height: 10),
+                const Text('Acesso Negado', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 5),
+                Text(
+                  'Esta funcionalidade é exclusiva para Padre e Administração.', 
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey.shade600)
+                ),
+              ],
+            ),
+          )
+        )
+      );
     }
 
     return Column(children: [
+      // BARRA DE FILTROS
       Card(
         child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(children: [
-            TextButton(onPressed: () async {
-              final p = await showDatePicker(context: context, initialDate: _from, firstDate: DateTime(1900), lastDate: DateTime(2100));
-              if (p != null) setState(() => _from = p);
-            }, child: Text('From: ${fmtDate(_from)}')),
-            const SizedBox(width: 12),
-            TextButton(onPressed: () async {
-              final p = await showDatePicker(context: context, initialDate: _to, firstDate: DateTime(1900), lastDate: DateTime(2100));
-              if (p != null) setState(() => _to = p);
-            }, child: Text('To: ${fmtDate(_to)}')),
-            const SizedBox(width: 12),
-            FilledButton.tonal(
-              onPressed: _loading ? null : () async {
-                if (_from.isAfter(_to)) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Intervalo inválido: a data inicial não pode ser posterior à final')));
-                  return;
-                }
-                setState(() => _loading = true);
-                _result = await app.searchCelebrations(_from, _to);
-                setState(() => _loading = false);
-              },
-              child: _loading ? const CircularProgressIndicator() : const Text('Pesquisar'),
-            )
-          ]),
-        ),
-      ),
-      const SizedBox(height: 12),
-      Expanded(
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: _loading ? const Center(child: CircularProgressIndicator()) : _result.isEmpty ? Center(child: Text('Nenhuma celebração encontrada', style: TextStyle(color: Colors.grey.shade700))) :
-            ListView.separated(
-              itemCount: _result.length,
-              separatorBuilder: (_, __) => const Divider(),
-              itemBuilder: (c, i) {
-                final e = _result[i];
-                return Card(
-                  margin: const EdgeInsets.symmetric(vertical: 6),
-                  child: ListTile(
-                    title: Text('${e.type.name} — ${fmtDate(e.date)}', style: const TextStyle(fontWeight: FontWeight.w700)),
-                    subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      const SizedBox(height: 6),
-                      ..._buildCelebrationDetails(e),
-                      const SizedBox(height: 6),
-                      Text(e.isSigned ? 'Assinado' : 'Não assinado', style: TextStyle(color: e.isSigned ? Colors.green : Colors.red, fontWeight: FontWeight.w700)),
-                    ]),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Pesquisar por intervalo de datas', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 12),
+              Row(children: [
+                // Data Início
+                Expanded(
+                  child: InkWell(
+                    onTap: () async {
+                      final p = await showDatePicker(context: context, initialDate: _from, firstDate: DateTime(1900), lastDate: DateTime(2100));
+                      if (p != null) setState(() => _from = p);
+                    },
+                    child: InputDecorator(
+                      decoration: const InputDecoration(labelText: 'De:', prefixIcon: Icon(Icons.calendar_today, size: 18)),
+                      child: Text(fmtDate(_from)),
+                    ),
                   ),
-                );
-              },
-            ),
+                ),
+                const SizedBox(width: 12),
+                // Data Fim
+                Expanded(
+                  child: InkWell(
+                    onTap: () async {
+                      final p = await showDatePicker(context: context, initialDate: _to, firstDate: DateTime(1900), lastDate: DateTime(2100));
+                      if (p != null) setState(() => _to = p);
+                    },
+                    child: InputDecorator(
+                      decoration: const InputDecoration(labelText: 'Até:', prefixIcon: Icon(Icons.calendar_today, size: 18)),
+                      child: Text(fmtDate(_to)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // Botão Pesquisar
+                FilledButton.icon(
+                  onPressed: _loading ? null : () async {
+                    if (_from.isAfter(_to)) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text('A data de início não pode ser posterior à data de fim.'),
+                        backgroundColor: Colors.red,
+                      ));
+                      return;
+                    }
+                    
+                    setState(() { _loading = true; _hasSearched = true; });
+                    
+                    // Chama a pesquisa no repositório
+                    _result = await app.searchCelebrations(_from, _to);
+                    
+                    setState(() => _loading = false);
+                  },
+                  icon: _loading 
+                    ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.search),
+                  label: const Text('Pesquisar'),
+                )
+              ]),
+            ],
           ),
         ),
+      ),
+      
+      const SizedBox(height: 10),
+
+      // LISTA DE RESULTADOS
+      Expanded(
+        child: _loading 
+          ? const Center(child: CircularProgressIndicator()) 
+          : _result.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.event_busy, size: 60, color: Colors.grey.shade300),
+                      const SizedBox(height: 16),
+                      // 3. MENSAGEM ADEQUADA (RF11)
+                      Text(
+                        _hasSearched 
+                          ? 'Não existem celebrações neste intervalo de datas.' 
+                          : 'Selecione as datas acima para pesquisar.',
+                        style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.only(bottom: 80),
+                  itemCount: _result.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (context, i) {
+                    final e = _result[i];
+                    return Card(
+                      elevation: 1,
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(children: [
+                                  Icon(Icons.event, color: Theme.of(context).colorScheme.primary, size: 20),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    '${e.type.name} — ${fmtDate(e.date)}', 
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)
+                                  ),
+                                ]),
+                                Chip(
+                                  label: Text(e.isSigned ? 'Assinado' : 'Pendente', style: const TextStyle(fontSize: 12)),
+                                  backgroundColor: e.isSigned ? Colors.green.shade100 : Colors.orange.shade100,
+                                  labelStyle: TextStyle(color: e.isSigned ? Colors.green.shade900 : Colors.orange.shade900),
+                                  visualDensity: VisualDensity.compact,
+                                )
+                              ],
+                            ),
+                            const Divider(),
+                            _buildDetails(e),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Detalhes: ${e.details}', 
+                              style: const TextStyle(fontStyle: FontStyle.italic, fontSize: 12, color: Colors.grey)
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
       ),
     ]);
   }
@@ -1838,23 +1957,10 @@ class DocumentsPage extends StatefulWidget {
   @override
   State<DocumentsPage> createState() => _DocumentsPageState();
 }
+
 class _DocumentsPageState extends State<DocumentsPage> {
   List<Document> _docs = [];
   bool _loading = false;
-
-  Future<void> _load() async {
-    setState(() => _loading = true);
-    final app = Provider.of<AppState>(context, listen: false);
-    if (!app.loggedIn) {
-      _docs = [];
-    } else {
-      _docs = await app.getDocumentsForUser(app.currentUser!.id);
-      if (app.currentUser!.role == Role.Fiel) {
-        _docs = _docs.where((d) => d.feeStatus == FeeStatus.Pago).toList();
-      }
-    }
-    setState(() => _loading = false);
-  }
 
   @override
   void initState() {
@@ -1862,70 +1968,168 @@ class _DocumentsPageState extends State<DocumentsPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final app = Provider.of<AppState>(context, listen: false);
+
+    if (!app.loggedIn) {
+      _docs = [];
+    } else {
+      // 1. Buscar documentos
+      _docs = await app.getDocumentsForUser(app.currentUser!.id);
+      
+      // 2. Buscar celebrações para garantir que temos os detalhes
+      final allCelebrations = await app.getAllCelebrations();
+
+      // 3. Ligar manualmente Documento -> Celebração
+      for (var doc in _docs) {
+        try {
+          if (doc.originalCelebration == null) {
+            final match = allCelebrations.firstWhere((c) => c.id == doc.celebrationId);
+            doc.originalCelebration = match;
+          }
+        } catch (_) {}
+      }
+
+      // 4. Filtrar se for Fiel
+      if (app.currentUser!.role == Role.Fiel) {
+        _docs = _docs.where((d) => d.feeStatus == FeeStatus.Pago).toList();
+      }
+    }
+    setState(() => _loading = false);
+  }
+
+  // Esta função constrói os detalhes (Batizado, Pais, etc.)
   Widget _buildDocDetails(Document d) {
     final c = d.originalCelebration;
-    if (c == null) return Text('Documento sem celebração associada');
+    if (c == null) return const Text('A carregar detalhes...');
+    
     List<Widget> rows = [];
-    rows.add(Text('Tipo: ${d.type}'));
-    rows.add(Text('Montante: €${d.feeAmount.toStringAsFixed(2)}'));
-    rows.add(const SizedBox(height: 6));
-    // celebration-specific details
+    
+    // Detalhes genéricos
+    rows.add(Text('Montante: €${d.feeAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)));
+    rows.add(const SizedBox(height: 8));
+    
+    // Detalhes específicos da celebração
     if (c.type == CelebrationType.Batismo) {
       rows.add(Text('Batizado: ${c.nomeBatizado ?? "-"}'));
       rows.add(Text('Pais: ${c.pai ?? "-"} e ${c.mae ?? "-"}'));
+      rows.add(Text('Padrinhos: ${c.padrinho1 ?? "-"} e ${c.padrinho2 ?? "-"}'));
     } else if (c.type == CelebrationType.Casamento) {
-      rows.add(Text('Titular: ${c.ownerUserId}'));
-      rows.add(Text('Cônjuge: ${c.conjugeUserId ?? "-"}'));
+      rows.add(Text('Titular (ID): ${c.ownerUserId}'));
+      rows.add(Text('Cônjuge (ID): ${c.conjugeUserId ?? "-"}'));
+      rows.add(Text('Testemunhas: ${c.testemunha1 ?? "-"} / ${c.testemunha2 ?? "-"}'));
     } else {
       rows.add(Text('Falecido: ${c.nomeFalecido ?? "-"}'));
-      rows.add(Text('Local: ${c.localSepultura ?? "-"}'));
+      rows.add(Text('Local Sepultura: ${c.localSepultura ?? "-"}'));
+      rows.add(Text('Data Óbito: ${fmtDate(c.dataObito)}'));
     }
+    
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows);
   }
 
   @override
   Widget build(BuildContext context) {
     final app = Provider.of<AppState>(context);
-    if (!app.loggedIn || !(app.currentUser!.role == Role.Fiel || app.currentUser!.role == Role.Padre || app.currentUser!.role == Role.Administracao)) {
-      return Center(child: Card(child: Padding(padding: const EdgeInsets.all(12), child: Text('Acesso a documentos restrito — faça login como Fiel, Padre ou Administração.'))));
+    
+    // Verificação de segurança
+    if (!app.loggedIn || 
+        !(app.currentUser!.role == Role.Fiel || 
+          app.currentUser!.role == Role.Padre || 
+          app.currentUser!.role == Role.Administracao)) {
+      return const Center(child: Card(child: Padding(padding: EdgeInsets.all(12), child: Text('Acesso restrito.'))));
     }
 
     return Column(children: [
       Row(children: [
-        Expanded(child: Card(child: Padding(padding: const EdgeInsets.all(12), child: Row(children: [const Icon(Icons.folder), const SizedBox(width: 8), const Text('Meus Documentos / Certidões', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)), const Spacer(), FilledButton.tonal(onPressed: _load, child: const Text('Atualizar'))])))),
+        Expanded(child: Card(child: Padding(padding: const EdgeInsets.all(12), child: Row(children: [
+          const Icon(Icons.folder), 
+          const SizedBox(width: 8), 
+          const Text('Meus Documentos / Certidões', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)), 
+          const Spacer(), 
+          FilledButton.tonal(onPressed: _load, child: const Text('Atualizar'))
+        ])))),
       ]),
       const SizedBox(height: 12),
+      
+      // AQUI ESTÁ A LISTA CORRIGIDA
       Expanded(
         child: Card(
           child: Padding(
             padding: const EdgeInsets.all(12),
-            child: _loading ? const Center(child: CircularProgressIndicator()) : _docs.isEmpty ? Center(child: Text('Nenhum documento disponível (os documentos aparecem aqui apenas após pagamento).', style: TextStyle(color: Colors.grey.shade700))) :
-            ListView.separated(
-              itemCount: _docs.length,
-              separatorBuilder: (_, __) => const Divider(),
-              itemBuilder: (c, i) {
-                final d = _docs[i];
-                return ListTile(
-                  contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-                  title: Text(d.type, style: const TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: _buildDocDetails(d),
-                  trailing: FilledButton.tonal(
-                    onPressed: d.available ? () {
-                      showDialog(context: context, builder: (_) => AlertDialog(
-                        title: Text(d.type),
-                        content: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text('Documento para: ${d.ownerUserId}'),
-                          const SizedBox(height: 8),
-                          Text(d.fileContent ?? 'Sem conteúdo'),
-                        ])),
-                        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Fechar'))],
-                      ));
-                    } : null,
-                    child: const Text('Abrir'),
-                  ),
-                );
-              },
-            ),
+            child: _loading 
+                ? const Center(child: CircularProgressIndicator()) 
+                : _docs.isEmpty 
+                    ? Center(child: Text('Nenhum documento disponível.', style: TextStyle(color: Colors.grey.shade700))) 
+                    : ListView.separated(
+                        itemCount: _docs.length,
+                        separatorBuilder: (_, __) => const Divider(),
+                        itemBuilder: (c, i) {
+                          final d = _docs[i];
+                          return ListTile(
+                            contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+                            title: Text(d.type, style: const TextStyle(fontWeight: FontWeight.w600)),
+                            
+                            // 1. LISTA LIMPA (Texto simples aqui)
+                            subtitle: Text(
+                              d.feeStatus == FeeStatus.Pago 
+                                  ? 'Toque em "Abrir" para ver a certidão completa' 
+                                  : 'Pagamento pendente - Vá ao menu Pagamentos',
+                              style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                            ),
+                            
+                            trailing: FilledButton.tonal(
+                              onPressed: d.available ? () {
+                                showDialog(
+                                  context: context,
+                                  builder: (_) => AlertDialog(
+                                    title: Text(d.type, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                    
+                                    // 2. JANELA PREENCHIDA (Detalhes movidos para aqui)
+                                    content: SingleChildScrollView(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Text('DADOS DO REGISTO:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+                                          const SizedBox(height: 8),
+                                          
+                                          // Caixa cinza com os dados
+                                          Container(
+                                            width: double.infinity,
+                                            padding: const EdgeInsets.all(12),
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey.shade100,
+                                              borderRadius: BorderRadius.circular(8),
+                                              border: Border.all(color: Colors.grey.shade300),
+                                            ),
+                                            child: _buildDocDetails(d), // CHAMADA DA FUNÇÃO DE DETALHES
+                                          ),
+                                          
+                                          const SizedBox(height: 20),
+                                          const Divider(),
+                                          const SizedBox(height: 8),
+                                          
+                                          const Text('FICHEIRO GERADO:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            d.fileContent ?? 'Ficheiro Simulado', 
+                                            style: TextStyle(fontFamily: 'Courier', fontSize: 13, color: Colors.black87)
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    actions: [
+                                      TextButton(onPressed: () => Navigator.pop(context), child: const Text('Fechar'))
+                                    ],
+                                  ),
+                                );
+                              } : null,
+                              child: const Text('Download'),
+                            ),
+                          );
+                        },
+                      ),
           ),
         ),
       ),
