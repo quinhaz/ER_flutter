@@ -2073,7 +2073,7 @@ class _DocumentsPageState extends State<DocumentsPage> {
                             // 1. LISTA LIMPA (Texto simples aqui)
                             subtitle: Text(
                               d.feeStatus == FeeStatus.Pago 
-                                  ? 'Toque em "Abrir" para ver a certidão completa' 
+                                  ? 'Toque em "Download" para ver a certidão completa' 
                                   : 'Pagamento pendente - Vá ao menu Pagamentos',
                               style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                             ),
