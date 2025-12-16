@@ -30,9 +30,9 @@
 
 ## 5. Testar instalação + dependências:
 
-# Na shell:
-flutter --version
-flutter pub get
+- Na shell:
+-> flutter --version
+-> flutter pub get
 
 ## 6. Have fun:
 
@@ -50,3 +50,4 @@ Para testar no terminal:
 - ER_PROJ/
 - ├─ db_xampp/            <-- base de dados
 - ├─ lib/ main.dart       <-- entrada app e maioria do código
+
