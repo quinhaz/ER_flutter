@@ -4,7 +4,7 @@
 
 - [Flutter SDK](https://flutter.dev/docs/get-started/install)  
 - [VSCode](https://code.visualstudio.com/)
-- [Git](https://git-scm.com/downloads) (convém)
+- [Xampp](https://www.apachefriends.org/)
 
 ## 2. Instalação do Flutter no Windows
 
@@ -20,34 +20,35 @@
 
 ## 3. Clone do repo
 
-## 4. Testar instalação + dependências:
+- [Git](https://github.com/quinhaz/ER_flutter.git)
+- Após ter o clone do git, é precisso mover os files da base de dados e conexões. Os quais estarão na pasta db_xampp no projeto -> e isto tem de entrar na pasta do xampp e procurar htdocs (deverá estar em C:\xampp\htdocs).
+
+## 4. Incialização do xampp:
+
+1. Inicializar o Apache.
+2. inicializar o MySQL.
+
+## 5. Testar instalação + dependências:
 
 # Na shell:
 flutter --version
 flutter pub get
 
-## 5. Have fun:
+## 6. Have fun:
 
-Para testar online:
-- https://dartpad.dev/
-- ...
+Para testar no terminal:
 
-- flutter run -d windows
-- flutter run -d chrome
+- flutter run -d windows.
+- flutter run -d chrome (Preferivelmente utilizar o Chrome).
 
 - Durante a execução, o Flutter permite interatividade no terminal:
   -> r → Hot reload
   -> R → Hot restart
   -> q → Sair da execução
 
-## 6. Estrutura do projeto
-- lib/
-- ├─ main.dart       <-- entrada app e maioria do código
-- ├─ pages/          <-- telas
-- ├─ widgets/        <-- widgets reutilizáveis
-- ├─ models/         <-- classes data
-- ├─ services/       <-- lógica e APIs
-
-## 7. Commits
+## 7. Estrutura *essencial* do projeto
+- ER_PROJ/
+- ├─ db_xampp/            <-- base de dados
+- ├─ lib/ main.dart       <-- entrada app e maioria do código
 
 
