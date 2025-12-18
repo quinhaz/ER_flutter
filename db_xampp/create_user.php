@@ -43,7 +43,6 @@ if ($check->num_rows > 0) {
 }
 
 // Insert User
-// Note: We use 'password_hash' column to match your DB screenshot
 $stmt = $conn->prepare("INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)");
 $stmt->bind_param("ssss", $name, $email, $pass, $role);
 

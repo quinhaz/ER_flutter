@@ -14,7 +14,6 @@ void main() {
   ));
 }
 
-
 //THEME & APP
 
 class GRIApp extends StatelessWidget {
@@ -514,7 +513,6 @@ class MySQLRepository implements Repository {
               id: json['id'].toString(),
               name: json['name'],
               email: json['email'],
-              // FIX: Your DB column is 'password_hash' based on screenshot
               password: json['password_hash'] ?? '', 
               role: _parseRole(json['role']),
             );
@@ -825,211 +823,6 @@ class MySQLRepository implements Repository {
   }
 }
 
-/*class InMemoryRepository implements Repository {
-  final List<User> _users = [];
-  final List<Celebration> _celebrations = [];
-  final List<Document> _documents = [];
-
-  
-  InMemoryRepository() {
-    // seed users
-    _users.addAll([
-      User(id: 'u_admin', name: 'Admin Local', email: 'admin@gri.local', password: 'admin123', role: Role.Administracao),
-      User(id: 'u_padre', name: 'Padre José', email: 'padre@gri.local', password: 'padre123', role: Role.Padre),
-      User(id: 'u_fiel', name: 'Maria Silva', email: 'maria@gri.local', password: 'fiel123', role: Role.Fiel),
-      User(id: 'u_fiel2', name: 'João Pereira', email: 'joao@gri.local', password: 'fiel123', role: Role.Fiel),
-    ]);
-
-    // celebração para a Maria (assinada) e o seu doc pendente
-    final c1 = Celebration(
-      id: _nextId('c'),
-      type: CelebrationType.Batismo,
-      date: DateTime.now().subtract(const Duration(days: 40)),
-      details: 'Batismo do João (associado a Maria)',
-      ownerUserId: 'u_fiel',
-      nomeBatizado: 'João',
-      pai: 'Carlos Silva',
-      mae: 'Ana Silva',
-      padrinho1: 'Pedro',
-      padrinho2: 'Sofia',
-      dataNascimento: DateTime.now().subtract(const Duration(days: 3000)),
-      signedByUserId: 'u_padre',
-      signedAt: DateTime.now().subtract(const Duration(days: 39)),
-    );
-    _celebrations.add(c1);
-
-    _documents.add(Document(
-      id: _nextId('d'),
-      celebrationId: c1.id,
-      ownerUserId: c1.ownerUserId,
-      type: 'Certidão de Batismo',
-      feeAmount: 10.0,
-      feeStatus: FeeStatus.Pendente,
-      originalCelebration: c1,
-    ));
-  }
-
-  String _nextId(String prefix) => '$prefix-${Random().nextInt(100000)}';
-
-  // Users
-  @override
-  Future<User?> findUserByEmail(String email) async {
-    try {
-      return _users.firstWhere((u) => u.email == email);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  @override
-  Future<User> createUser(String name, String email, String password, Role role) async {
-    if (_users.any((u) => u.email == email)) throw Exception('Email already registered');
-    final u = User(id: _nextId('u'), name: name, email: email, password: password, role: role);
-    _users.add(u);
-    return u;
-  }
-
-  @override
-  Future<List<User>> getAllUsers() async => List.from(_users);
-
-  @override
-  Future<User?> getUserById(String id) async {
-    try {
-      return _users.firstWhere((u) => u.id == id);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  // Celebrations
-  @override
-  Future<Celebration> createCelebration(CelebrationType type, DateTime date, String details, String ownerUserId, Map<String, dynamic> extraFields) async {
-    final c = Celebration(
-      id: _nextId('c'),
-      type: type,
-      date: date,
-      details: details,
-      ownerUserId: ownerUserId,
-    );
-
-    // apply extra fields depending on type
-    if (type == CelebrationType.Batismo) {
-      c.nomeBatizado = extraFields['nomeBatizado'] as String?;
-      c.pai = extraFields['pai'] as String?;
-      c.mae = extraFields['mae'] as String?;
-      c.padrinho1 = extraFields['padrinho1'] as String?;
-      c.padrinho2 = extraFields['padrinho2'] as String?;
-      c.dataNascimento = extraFields['dataNascimento'] as DateTime?;
-    } else if (type == CelebrationType.Casamento) {
-      c.conjugeUserId = extraFields['conjugeUserId'] as String?;
-      c.testemunha1 = extraFields['testemunha1'] as String?;
-      c.testemunha2 = extraFields['testemunha2'] as String?;
-    } else if (type == CelebrationType.Obito) {
-      c.nomeFalecido = extraFields['nomeFalecido'] as String?;
-      c.dataNascimentoFalecido = extraFields['dataNascimentoFalecido'] as DateTime?;
-      c.dataObito = extraFields['dataObito'] as DateTime?;
-      c.localSepultura = extraFields['localSepultura'] as String?;
-    }
-
-    _celebrations.add(c);
-    return c;
-  }
-
-  @override
-  Future<void> signCelebration(String celebrationId, String padreUserId) async {
-    final idx = _celebrations.indexWhere((c) => c.id == celebrationId);
-    if (idx == -1) throw Exception('Celebration not found');
-    final c = _celebrations[idx];
-    if (c.isSigned) throw Exception('Already signed');
-    c.signedByUserId = padreUserId;
-    c.signedAt = DateTime.now();
-
-    // auto-gen um docs para o owner (se ele não existir)
-    final exists = _documents.where((d) => d.celebrationId == c.id && d.ownerUserId == c.ownerUserId).toList();
-    if (exists.isEmpty) {
-      final doc = Document(
-        id: _nextId('d'),
-        celebrationId: c.id,
-        ownerUserId: c.ownerUserId,
-        type: _docTypeForCelebration(c.type),
-        feeAmount: 10.0,
-        feeStatus: FeeStatus.Pendente,
-        originalCelebration: c,
-      );
-      _documents.add(doc);
-    }
-  }
-
-  static String _docTypeForCelebration(CelebrationType t) {
-    switch (t) {
-      case CelebrationType.Batismo:
-        return 'Certidão de Batismo';
-      case CelebrationType.Casamento:
-        return 'Certidão de Casamento';
-      case CelebrationType.Obito:
-        return 'Certidão de Óbito';
-    }
-  }
-
-  @override
-  Future<List<Celebration>> searchCelebrations(DateTime from, DateTime to) async {
-    return _celebrations.where((c) => !c.date.isBefore(from) && !c.date.isAfter(to)).toList();
-  }
-
-  @override
-  Future<List<Celebration>> getAllCelebrations() async => List.from(_celebrations);
-
-  // Documentos
-  @override
-  Future<Document> createDocumentForCelebration(String celebrationId, String ownerUserId, String docType, double fee) async {
-    final doc = Document(
-      id: _nextId('d'),
-      celebrationId: celebrationId,
-      ownerUserId: ownerUserId,
-      type: docType,
-      feeAmount: fee,
-      feeStatus: FeeStatus.Pendente,
-      originalCelebration: _celebrations.firstWhere((c) => c.id == celebrationId, orElse: () => throw Exception('celebration not found')),
-    );
-    _documents.add(doc);
-    return doc;
-  }
-
-  @override
-  Future<List<Document>> getDocumentsForUser(String userId, Role role) async {
-    if (role == Role.Padre || role == Role.Administracao) {
-      return List.from(_documents);
-    }
-    return _documents.where((d) => d.ownerUserId == userId).toList();
-  }
-
-  @override
-  Future<Document?> getDocumentById(String docId) async {
-    try {
-      return _documents.firstWhere((d) => d.id == docId);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  @override
-  Future<void> markFeePaid(String documentId, String method) async {
-    final idx = _documents.indexWhere((d) => d.id == documentId);
-    if (idx == -1) throw Exception('document not found');
-    final d = _documents[idx];
-    d.feeStatus = FeeStatus.Pago;
-    d.paymentMethod = method;
-    d.paymentDate = DateTime.now();
-    d.generatedAt ??= DateTime.now();
-    d.fileContent ??= 'PDF - ${d.type} - ${d.id} - Emitido em ${DateTime.now()}';
-  }
-
-  @override
-  Future<List<Document>> getPendingDocumentsForUser(String userId) async {
-    return _documents.where((d) => d.ownerUserId == userId && d.feeStatus == FeeStatus.Pendente).toList();
-  }
-}*/
-
 // AppState (Provider) and Shell + navigation
 class AppState extends ChangeNotifier {
   final Repository repository;
@@ -1098,15 +891,12 @@ class AppState extends ChangeNotifier {
   Future<List<Document>> getPendingDocumentsForUser(String userId) => repository.getPendingDocumentsForUser(userId);
 }
 
-
 // MAIN SHELL (Navigation)
-
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
   @override
   State<MainShell> createState() => _MainShellState();
 }
-
 class _MainShellState extends State<MainShell> {
   int selectedIndex = 0;
   final pages = const [
@@ -1187,7 +977,7 @@ class _MainShellState extends State<MainShell> {
   }
 }
 
-// PAGES: Login & Register
+// PAGES: Login
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
   @override
@@ -1276,7 +1066,7 @@ class _LoginPageState extends State<LoginPage> {
                     child: Text('Contas de teste:', style: TextStyle(color: Colors.grey.shade700)),
                   ),
                   const SizedBox(height: 6),
-                  const Text('admin@gri.local / admin123  •  padre@gri.local / padre123  •  maria@gri.local / fiel123', style: TextStyle(fontSize: 12)),
+                  const Text('Perfil Padre: padre@gri.local / padre123  •  Perfil Fiel: maria@gri.local / fiel123', style: TextStyle(fontSize: 12)),
                 ]),
               ),
             ),
@@ -1287,6 +1077,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 }
 
+// PAGES: Register
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
   @override
@@ -1744,7 +1535,6 @@ class SearchCelebrationsPage extends StatefulWidget {
   @override
   State<SearchCelebrationsPage> createState() => _SearchCelebrationsPageState();
 }
-
 class _SearchCelebrationsPageState extends State<SearchCelebrationsPage> {
   // Intervalo padrão: últimos 30 dias até hoje (apenas como exemplo inicial)
   DateTime _from = DateTime.now().subtract(const Duration(days: 30));
@@ -1951,13 +1741,11 @@ class _SearchCelebrationsPageState extends State<SearchCelebrationsPage> {
 
 // Documentos (Fiel vê apenas pagos
 //             Padre/Admin vê todos)
-
 class DocumentsPage extends StatefulWidget {
   const DocumentsPage({super.key});
   @override
   State<DocumentsPage> createState() => _DocumentsPageState();
 }
-
 class _DocumentsPageState extends State<DocumentsPage> {
   List<Document> _docs = [];
   bool _loading = false;
@@ -2138,7 +1926,6 @@ class _DocumentsPageState extends State<DocumentsPage> {
 }
 
 // Pagamentos (Pendentes + formulário de pagamento)
-
 class PaymentsPage extends StatefulWidget {
   const PaymentsPage({super.key});
   @override

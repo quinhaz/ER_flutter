@@ -7,7 +7,7 @@ CREATE TABLE users (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(150) NOT NULL,
   email VARCHAR(200) NOT NULL UNIQUE,
-  password_hash VARCHAR(255) NOT NULL,
+  password VARCHAR(255) NOT NULL,
   role ENUM('Padre','Administracao','Fiel','Voluntario','Gestao') NOT NULL DEFAULT 'Fiel',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
